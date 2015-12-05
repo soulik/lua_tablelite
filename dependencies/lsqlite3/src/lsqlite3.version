@@ -1,0 +1,4 @@
+LuaBox2D {
+	global: luaopen_lsqlite3;
+	local: *;
+};

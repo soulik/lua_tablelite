@@ -1,0 +1,11 @@
+*.swp
+*.sdf
+*.suo
+*.opensdf
+*.user
+*.sqlite3
+build/*
+tests/*.txt
+tests/*.dll
+tests/*.exe
+tests/*.bin
