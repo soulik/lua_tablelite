@@ -20,27 +20,40 @@ local s1 = scheme.new {
 }
 
 local d = db.new()
+
 s1.apply(d)
+local code = d([[
+CREATE VIEW IF NOT EXISTS main.config_view(id, parent, name, value, version, modTime) AS
+	SELECT * FROM
+		(
+			SELECT id, parent, name, value, version, modTime FROM main.config
+			GROUP BY parent, name
+			ORDER BY version DESC
+		)
+	ORDER BY parent ASC, name ASC;
+]])
 
-local code = d('INSERT INTO config (name, value) VALUES (:name, :value)', {name='name 2', value='Abcdef4'})
---[[
-WITH old_config(id, parent, version) AS (SELECT id, parent, version FROM config WHERE name=:name AND parent=0)
-VALUES (old_config.id, old_config.parent, :name, :value, old_config.version+1)
---]]
-if code == db.sql.CONSTRAINT then
-	local code = d([[
-INSERT INTO config (id, parent, name, value, version)
-SELECT id, parent, (version+1), name, :value FROM config WHERE name=:name AND parent=0;
-]], {name='name 2', value='Abcdef4'})
-	print(code)
-end
+local code = d([[
+CREATE TRIGGER IF NOT EXISTS main.config_t1 BEFORE INSERT ON config FOR EACH ROW
+WHEN EXISTS (
+	SELECT parent, name FROM main.config
+	WHERE
+		parent=COALESCE(NEW.parent, 0) AND
+		name=NEW.name AND
+		version = (SELECT MAX(version) FROM main.config WHERE parent=COALESCE(NEW.parent, 0) AND name=NEW.name GROUP BY parent, name) AND
+		value != NEW.value
+	ORDER BY id ASC, version DESC LIMIT 1
+)
+BEGIN
+	INSERT INTO config (parent, name, version, value)
+		SELECT parent, name, (version+1), NEW.value FROM config WHERE parent=COALESCE(NEW.parent, 0) AND name=NEW.name ORDER BY version DESC LIMIT 1;
+END
+]])
 
-print(code)
+local code = d('INSERT INTO config (name, value) VALUES (:name, :value)', {name='name 1', value='Abcdef 1'})
 
 --local code, items = d('SELECT * FROM config WHERE name="name 2";', {name='name 2', value='Abcdef4'})
-local code, items = d('SELECT * FROM config;')
-print(code)
---local code, items = d('SELECT id, parent, version FROM config WHERE name="name 2" AND parent=0')
+local code, items = d('SELECT * FROM config_view;')
 
 for _, item in ipairs(items) do
 	local t = {}
